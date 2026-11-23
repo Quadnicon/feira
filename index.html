@@ -110,7 +110,49 @@ function seed(){
  return{users:[{id:1,nome:'Administrador',login:'Feirante',senha:'Feirante@123',papel:'admin'},{id:2,nome:'Operador',login:'operador',senha:'oper123',papel:'operador'}],
  cats:{in:['Taxas de feirantes','Inscrições de participantes','Patrocínios','Doações','Venda de ingressos','Outros recebimentos'],out:['Aluguel de espaço','Decoração','Alimentação','Divulgação e publicidade','Equipamentos','Transporte','Segurança','Limpeza','Outros gastos']},feirantes:fx,feiras,movs}}
 let DB;try{DB=JSON.parse(localStorage.getItem(K))}catch(e){}if(!DB)DB=seed();{const a=DB.users.find(u=>u.id==1);if(a){a.login='Feirante';a.senha='Feirante@123'}}
-const save=()=>{try{localStorage.setItem(K,JSON.stringify(DB))}catch(e){toast('Não foi possível salvar neste navegador.',1)}};
+async function save() {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+
+    if (!user) {
+        toast('Usuário não autenticado.', 1);
+        return;
+    }
+
+    const { error } = await supabaseClient
+        .from('feira_da_lua')
+        .upsert({
+            user_id: user.id,
+            dados: DB,
+            atualizado_em: new Date().toISOString()
+        });
+
+    if (error) {
+        console.error('Erro ao salvar:', error);
+        toast('Erro ao salvar os dados na nuvem.', 1);
+        return;
+    }
+  async function loadData() {
+    const { data: { user } } = await supabaseClient.auth.getUser();
+
+    if (!user) {
+        return;
+    }
+
+    const { data, error } = await supabaseClient
+        .from('feira_da_lua')
+        .select('dados')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+    if (error) {
+        console.error('Erro ao carregar:', error);
+        return;
+    }
+
+    if (data) {
+        DB = data.dados;
+    }
+}
 let me=null,page='dash',CH=[],P='all',PG=1,COL=false,OPEN=false,F={tipo:'',cat:'',de:'',ate:'',q:'',ord:'data-desc'};
 try{me=JSON.parse(sessionStorage.getItem('fl_me'))}catch(e){}
 const adm=()=>me&&me.papel=='admin';
