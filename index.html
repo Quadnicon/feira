@@ -111,10 +111,14 @@ function seed(){
  cats:{in:['Taxas de feirantes','Inscrições de participantes','Patrocínios','Doações','Venda de ingressos','Outros recebimentos'],out:['Aluguel de espaço','Decoração','Alimentação','Divulgação e publicidade','Equipamentos','Transporte','Segurança','Limpeza','Outros gastos']},feirantes:fx,feiras,movs}}
 let DB;try{DB=JSON.parse(localStorage.getItem(K))}catch(e){}if(!DB)DB=seed();{const a=DB.users.find(u=>u.id==1);if(a){a.login='Feirante';a.senha='Feirante@123'}}
 async function save() {
-    const { data: { user } } = await supabaseClient.auth.getUser();
+    // Salva localmente como backup
+    localStorage.setItem(K, JSON.stringify(DB));
 
-    if (!user) {
-        toast('Usuário não autenticado.', 1);
+    const { data: { user }, error: authError } =
+        await supabaseClient.auth.getUser();
+
+    if (authError || !user) {
+        console.warn('Usuário não autenticado no Supabase. Dados salvos localmente.');
         return;
     }
 
@@ -127,17 +131,35 @@ async function save() {
         });
 
     if (error) {
-        console.error('Erro ao salvar:', error);
-        toast('Erro ao salvar os dados na nuvem.', 1);
-        return;
-    }
-  async function loadData() {
-    const { data: { user } } = await supabaseClient.auth.getUser();
-
-    if (!user) {
+        console.error('Erro ao salvar no Supabase:', error);
+        toast('Erro ao salvar na nuvem.', 1);
         return;
     }
 
+    console.log('Dados salvos no Supabase.');
+}
+
+async function loadData() {
+    // Primeiro carrega o backup local
+    try {
+        const local = localStorage.getItem(K);
+        if (local) {
+            DB = JSON.parse(local);
+        }
+    } catch (e) {
+        console.error('Erro ao carregar dados locais:', e);
+    }
+
+    // Verifica autenticação no Supabase
+    const { data: { user }, error: authError } =
+        await supabaseClient.auth.getUser();
+
+    if (authError || !user) {
+        console.log('Nenhum usuário autenticado no Supabase.');
+        return;
+    }
+
+    // Busca os dados da nuvem
     const { data, error } = await supabaseClient
         .from('feira_da_lua')
         .select('dados')
@@ -145,12 +167,17 @@ async function save() {
         .maybeSingle();
 
     if (error) {
-        console.error('Erro ao carregar:', error);
+        console.error('Erro ao carregar dados do Supabase:', error);
         return;
     }
 
-    if (data) {
+    if (data && data.dados) {
         DB = data.dados;
+
+        // Atualiza também o backup local
+        localStorage.setItem(K, JSON.stringify(DB));
+
+        console.log('Dados carregados do Supabase.');
     }
 }
 let me=null,page='dash',CH=[],P='all',PG=1,COL=false,OPEN=false,F={tipo:'',cat:'',de:'',ate:'',q:'',ord:'data-desc'};
@@ -273,6 +300,11 @@ function addU(){const o={nome:$('#un').value.trim(),login:$('#ul').value.trim(),
 function delU(id){ask('Remover este usuário?',()=>{DB.users=DB.users.filter(u=>u.id!=id);save();render();toast('Usuário removido.')},'Remover')}
 function addC(t){const v=$('#nc_'+t).value.trim();if(v&&!DB.cats[t].includes(v)){DB.cats[t].push(v);save();render();toast('Categoria adicionada.')}}
 function delC(t,i){DB.cats[t].splice(i,1);save();render();toast('Categoria removida.')}
-render();
+loadData()
+    .then(() => render())
+    .catch(error => {
+        console.error('Erro na inicialização:', error);
+        render();
+    });
 </script>
 </body></html>
